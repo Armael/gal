@@ -1,0 +1,22 @@
+(executable
+ (name main)
+ (modules main app_embed)
+ (libraries lwt opium yojson multipart_form bos astring)
+ )
+
+(executable
+ (name app)
+ (modules app)
+ (libraries brr react reactiveData)
+ (link_flags (:standard -no-check-prims))
+ (modes js))
+
+(executable
+ (name embed)
+ (modules embed)
+ (libraries bos))
+
+(rule
+ (targets app_embed.ml)
+ (deps app.bc.js embed.exe)
+ (action (run ./embed.exe ./app.bc.js app_embed.ml)))
