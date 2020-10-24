@@ -377,12 +377,13 @@ let enable_debug app =
   let app : opium_app = Obj.magic app in
   (Obj.magic { app with debug = true } : App.t)
 
-let gal debug admin_password base_dir port =
+let gal debug admin_password no_serve_static base_dir port =
   Printf.printf "Using content directory: %s\n%!" base_dir;
   if debug then Printf.printf "Debug enabled\n%!";
+  let id x = x in
   let auth =
     match admin_password with
-    | None -> fun x -> x
+    | None -> id
     | Some pass ->
        Printf.printf "Using authentication\n%!";
        middleware (Auth.m (auth pass))
@@ -397,8 +398,8 @@ let gal debug admin_password base_dir port =
     (* Middlewares. The order matters: it is important that the middleware for
        static content goes before the one for authentication (we only want
        authentication for non-static pages). *)
-    |> (if debug then enable_debug else fun x -> x)
-    |> middleware (static base_dir)
+    |> (if debug then enable_debug else id)
+    |> (if no_serve_static then id else middleware (static base_dir))
     |> auth
     |> App.start
   in
@@ -410,16 +411,22 @@ let gal debug admin_password base_dir port =
 open Cmdliner
 
 let port =
-  let doc = "Port to listen to" in
+  let doc = "Port where to listen to." in
   Arg.(value & opt int 3000 & info ~doc ~docv:"PORT" ["port"; "p"])
 
 let base_dir =
-  let doc = "Directory where to store the generated content" in
+  let doc = "Directory where to store the generated content." in
   Arg.(required & pos 0 (some dir) None & info ~doc ~docv:"CONTENT_DIR" [])
 
 let debug =
-  let doc = "Enable debugging" in
+  let doc = "Enable debugging." in
   Arg.(value & flag & info ~doc ~docv:"DEBUG" ["debug"])
+
+let no_serve_static =
+  let doc = "Do not serve static content. If this option is enabled,
+             you need a separate web server to serve the static content in \
+             $(i,CONTENT_DIR)." in
+  Arg.(value & flag & info ~doc ~docv:"" ["no-serve-static"])
 
 let admin_pass =
   let doc = "Authentication password. The username is \"admin\".
@@ -432,7 +439,7 @@ let cmd =
   let man = [
     ]
   in
-  Term.(const gal $ debug $ admin_pass $ base_dir $ port),
+  Term.(const gal $ debug $ admin_pass $ no_serve_static $ base_dir $ port),
   Term.info "gal" ~doc ~man ~exits:Term.default_exits
 
 let () = Term.(exit @@ eval cmd)
