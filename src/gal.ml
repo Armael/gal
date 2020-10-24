@@ -424,7 +424,7 @@ let port =
   Arg.(value & opt int 3000 & info ~doc ~docv:"PORT" ["port"; "p"])
 
 let base_dir =
-  let doc = "Directory where to store the generated content." in
+  let doc = "Directory where to store (and serve from) the generated content." in
   Arg.(required & pos 0 (some dir) None & info ~doc ~docv:"CONTENT_DIR" [])
 
 let debug =
