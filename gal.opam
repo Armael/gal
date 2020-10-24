@@ -1,0 +1,23 @@
+opam-version: "2.0"
+maintainer: "Armaël Guéneau <armael@isomorphis.me>"
+authors: ["Armaël Guéneau"]
+homepage: "https://github.com/Armael/gal"
+license: ["ISC" "BSD3"]
+dev-repo: "git+https://github.com/Armael/gal.git"
+bug-reports: "https://github.com/Armael/gal/issues"
+tags: ["web" "webapp" "gallery"]
+depends:
+[
+  "ocaml" {>= "4.08.0"}
+  "dune" {>= "2.0"}
+  "brr"
+  "lwt"
+  "opium" {<= "0.18.0"}
+  "multipart_form" {= "0.1.0"}
+  "bos"
+  "astring"
+  "cmdliner"
+]
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+]

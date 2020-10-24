@@ -1,6 +1,7 @@
 (executable
- (name main)
- (modules main app_embed)
+ (name gal)
+ (public_name gal)
+ (modules gal app_embed)
  (libraries lwt opium multipart_form bos astring cmdliner)
  )
 
