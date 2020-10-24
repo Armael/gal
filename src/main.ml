@@ -294,7 +294,7 @@ let form_post ~base_dir =
            let cout = open_out page_fn in
            output_string cout page;
            close_out cout;
-           Ok (base_dir / url_field)
+           Ok (base_dir / url_field ^ "/")
          end
          |> function
            | Ok uri -> redirect' (Uri.of_string uri)
@@ -306,19 +306,20 @@ let static_with_indexes ~local_path ~uri_prefix () =
   let filter, name = Rock.Middleware.(filter static, name static) in
   let module String = Opium_kernel__Misc.String in
   let filter handler (req: Request.t) =
-    let req =
-      if Request.meth req = `GET then
-        let req_path = req |> Request.uri |> Uri.path in
-        let maybe_dir () = local_path ^ String.chop_prefix ~prefix:uri_prefix req_path in
-        if (req_path |> String.is_prefix ~prefix:uri_prefix)
-           && Bos.OS.Dir.exists (Fpath.(v @@ maybe_dir ())) = Ok true
-        then
-          { req with request =
-            Cohttp.Request.{ req.request with resource = req_path ^ "/index.html" } }
-        else req
-     else req
-    in
-    filter handler req
+    if Request.meth req = `GET then
+      let req_path = req |> Request.uri |> Uri.path in
+      let maybe_dir () = local_path ^ String.chop_prefix ~prefix:uri_prefix req_path in
+      if (req_path |> String.is_prefix ~prefix:uri_prefix)
+         && Bos.OS.Dir.exists (Fpath.(v @@ maybe_dir ())) = Ok true
+      then
+        if Astring.String.is_suffix ~affix:"/" req_path then
+          filter handler
+            { req with request =
+              Cohttp.Request.{ req.request with resource = req_path ^ "index.html" } }
+        else
+          redirect' (Uri.of_string (req_path ^ "/"))
+      else filter handler req
+    else filter handler req
   in
   Rock.Middleware.create ~filter ~name
 
