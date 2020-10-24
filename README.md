@@ -5,6 +5,8 @@ A simple photo-gallery creation webapp.
 Allows one to upload some photos and comments, and generates a static webpage
 for the corresponding photo gallery.
 
+[Demo video](http://srv.isomorphis.me/gal-demo3.mp4)
+
 ## Installation
 
 ``` 
