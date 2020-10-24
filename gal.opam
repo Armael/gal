@@ -10,7 +10,7 @@ depends:
 [
   "ocaml" {>= "4.08.0"}
   "dune" {>= "2.0"}
-  "brr"
+  "brr" {= "0.1.0"}
   "lwt"
   "opium" {= "0.18.0"}
   "multipart_form" {= "0.1.0"}
