@@ -79,12 +79,6 @@ let get_header_key header =
   let fn = Content_disposition.filename v in
   Ok (k, fn)
 
-let validate_url_field s =
-  let module Ascii = Astring.Char.Ascii in
-  let char_ok c = Ascii.is_alphanum c || List.mem c ['_'; '-'] in
-  if Astring.String.for_all char_ok s && s <> "" then Ok s
-  else Error "Invalid url field"
-
 let part_filename ~base_dir dirname filename id =
   base_dir / dirname / (string_of_int id ^ Filename.extension filename)
 
@@ -100,6 +94,24 @@ let mkdir_dirname file =
   let d = Filename.dirname file |> Fpath.v in
   Dir.create d |> Result.map_error (fun (`Msg msg) -> msg)
 
+let validate_url_field_name s =
+  let module Ascii = Astring.Char.Ascii in
+  let char_ok c = Ascii.is_alphanum c || List.mem c ['_'; '-'] in
+  if Astring.String.for_all char_ok s && s <> "" then Ok s
+  else Error "Invalid url field"
+
+let is_gallery_dir ~base_dir ~uri_prefix path =
+  let module String = Opium_kernel__Misc.String in
+  let maybe_dir () = base_dir ^ "/" ^ String.chop_prefix ~prefix:uri_prefix path in
+  String.is_prefix ~prefix:uri_prefix path
+  && Bos.OS.Dir.exists (Fpath.(v @@ maybe_dir ())) = Ok true
+
+let validate_url_field ~base_dir s =
+  let+ s = validate_url_field_name s in
+  if is_gallery_dir ~base_dir ~uri_prefix:"" s then
+    Error "This gallery already exists"
+  else Ok s
+
 let extract_parts ~base_dir content_type body =
   let module A = Angstrom.Buffered in
   let on_disk = Hashtbl.create 10 in
@@ -113,7 +125,7 @@ let extract_parts ~base_dir content_type body =
     | Ok s -> Ok s
     | Error _ ->
        let+ b = Hashtbl.find_opt in_mem Url_field |! "url-field not found while extracting parts" in
-       memo := validate_url_field (Buffer.contents b);
+       memo := validate_url_field ~base_dir (Buffer.contents b);
        !memo
   in
 
@@ -172,7 +184,7 @@ let extract_parts ~base_dir content_type body =
     Hashtbl.fold (fun k (fn, cout) l -> close_out cout; (k, fn) :: l) on_disk [] in
 
   if !errors <> [] then
-    Lwt.return (Error (string_of_int (List.length !errors) ^ " deferred errors:\n" ^ (String.concat "\n" !errors)))
+    Lwt.return @@ Error (String.concat "\n" !errors)
   else
     Lwt.return @@
       let+ url_field = List.assoc_opt Url_field in_mem_parts |! "url-field not found" in
@@ -303,10 +315,7 @@ let static_with_indexes ~local_path ~uri_prefix () =
   let filter handler (req: Request.t) =
     if Request.meth req = `GET then
       let req_path = req |> Request.uri |> Uri.path in
-      let maybe_dir () = local_path ^ String.chop_prefix ~prefix:uri_prefix req_path in
-      if (req_path |> String.is_prefix ~prefix:uri_prefix)
-         && Bos.OS.Dir.exists (Fpath.(v @@ maybe_dir ())) = Ok true
-      then
+      if is_gallery_dir ~base_dir:local_path ~uri_prefix req_path then
         if Astring.String.is_suffix ~affix:"/" req_path then
           filter handler
             { req with request =
