@@ -44,11 +44,6 @@ let index =
 let app_js =
   get "/app.js" (fun _ -> respond' (`String App_embed.data))
 
-let (|?) o x = match o with Some y -> y | None -> x
-let option_get = function
-  | Some x -> x
-  | None -> failwith "option_get"
-
 type content_item_ty = Text | Image
 
 type part_key =
