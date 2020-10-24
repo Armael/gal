@@ -114,10 +114,17 @@ let content_ids l =
   |> String.concat ","
 
 let main () =
-  let gal_url =
+  let gal_name_input =
+    txt_input ~id:"gal-url" ~cl:"gal-url-field"
+      ~at:At.[true' (Jstr.v "required");
+              v (Jstr.v "pattern") (Jstr.v {|(\w|-)*|});
+              title (Jstr.v "The gallery name must be composed of alphanumeric characters or -,_.");
+             ] ()
+  in
+  let gal_name =
     El.div [
-      El.label ~at:At.[for' (Jstr.v "gal-url-field")] [El.txt' "Gallery url"];
-      txt_input ~id:"gal-url" ~cl:"gal-url-field" ~at:At.[true' (Jstr.v "required")] ();
+      El.label ~at:At.[for' (Jstr.v "gal-url-field")] [El.txt' "Gallery name (required)"];
+      gal_name_input;
     ]
   in
   let title = txt_input ~id:"gal-title" ~at:At.[placeholder (Jstr.v "Gallery title…")] () in
@@ -134,7 +141,7 @@ let main () =
     v (Jstr.v "method") (Jstr.v "post");
     v (Jstr.v "enctype") (Jstr.v "multipart/form-data");
   ] [content_ids_field;
-     gal_url;
+     gal_name;
      title;
      viewer;
      submit] in
