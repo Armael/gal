@@ -1,6 +1,5 @@
 open Opium.Std
 
-let (let*) = Option.bind
 let (let+) = Result.bind
 let (let>) = Lwt.bind
 let (/) = Filename.concat
