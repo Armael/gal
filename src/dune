@@ -1,7 +1,7 @@
 (executable
  (name main)
  (modules main app_embed)
- (libraries lwt opium yojson multipart_form bos astring)
+ (libraries lwt opium multipart_form bos astring cmdliner)
  )
 
 (executable

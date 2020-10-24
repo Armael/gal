@@ -10,8 +10,6 @@ let (|!) o s =
   | Some x -> Ok x
   | None -> Error s
 
-let base_dir = "gallery"
-
 let index = {|
 <!DOCTYPE html>
 <html lang="en">
@@ -92,10 +90,10 @@ let validate_url_field s =
   if Astring.String.for_all char_ok s && s <> "" then Ok s
   else Error "Invalid url field"
 
-let part_filename dirname filename id =
+let part_filename ~base_dir dirname filename id =
   base_dir / dirname / (string_of_int id ^ Filename.extension filename)
 
-let page_filename dirname =
+let page_filename ~base_dir dirname =
   base_dir / dirname / "index.html"
 
 let open_out_res file =
@@ -107,7 +105,7 @@ let mkdir_dirname file =
   let d = Filename.dirname file |> Fpath.v in
   Dir.create d |> Result.map_error (fun (`Msg msg) -> msg)
 
-let extract_parts content_type body =
+let extract_parts ~base_dir content_type body =
   let module A = Angstrom.Buffered in
   let on_disk = Hashtbl.create 10 in
   let in_mem = Hashtbl.create 10 in
@@ -140,7 +138,7 @@ let extract_parts content_type body =
           let+ uf = url_field () in
           let+ id = part_id k in
           let+ filename = filename |! "No filename found for part to store to disk" in
-          let filename = part_filename uf filename id in
+          let filename = part_filename ~base_dir uf filename id in
           let+ (_:bool) = mkdir_dirname filename in
           let+ cout = open_out_res filename in
           Hashtbl.add on_disk k (filename, cout);
@@ -279,19 +277,19 @@ let collect_content content_ids in_mem on_disk =
     ) content_ids
   |> list_is_success
 
-let form_post =
+let form_post ~base_dir =
   post "/" (fun req ->
       print_endline "received post";
       match get_content_type (Cohttp.Request.headers req.request) with
       | None -> respond' (`String ("Error: missing content type"))
       | Some content_type ->
-         let> parts = extract_parts content_type req.body in
+         let> parts = extract_parts ~base_dir content_type req.body in
          begin
            let+ (url_field, content_ids, title, in_mem, on_disk) = parts in
            let+ content_ids = parse_content_ids content_ids in
            let+ content = collect_content content_ids in_mem on_disk in
            let page = mk_gal_page title content in
-           let page_fn = page_filename url_field in
+           let page_fn = page_filename ~base_dir url_field in
            let+ _:bool = mkdir_dirname page_fn in
            let cout = open_out page_fn in
            output_string cout page;
@@ -324,13 +322,47 @@ let static_with_indexes ~local_path ~uri_prefix () =
   in
   Rock.Middleware.create ~filter ~name
 
-let static = static_with_indexes ~local_path:base_dir ~uri_prefix:("/" ^ base_dir) ()
+let static base_dir =
+  static_with_indexes ~local_path:base_dir ~uri_prefix:("/" ^ base_dir) ()
 
-let _ =
-  print_endline "Listening on port 3000...";
-  App.empty
-  |> index
-  |> form_post
-  |> app_js
-  |> middleware static
-  |> App.run_command
+let gal debug base_dir port =
+  Printf.printf "Using content directory: %s\n%!" base_dir;
+  Printf.printf "Listening on port %d...\n%!" port;
+  let app =
+    App.empty
+    |> App.cmd_name "gal"
+    |> App.port port
+    |> index
+    |> form_post ~base_dir
+    |> app_js
+    |> middleware (static base_dir)
+    |> (if debug then middleware Middleware.debug else fun x -> x)
+    |> App.start
+  in
+  Lwt_main.run app
+
+(* Command line interface *)
+
+open Cmdliner
+
+let port =
+  let doc = "Port to listen to" in
+  Arg.(value & opt int 3000 & info ~doc ~docv:"PORT" ["port"; "p"])
+
+let base_dir =
+  let doc = "Directory where to store the generated content" in
+  Arg.(required & pos 0 (some dir) None & info ~doc ~docv:"CONTENT_DIR" [])
+
+let debug =
+  let doc = "Enable debugging" in
+  Arg.(value & flag & info ~doc ~docv:"DEBUG" ["debug"])
+
+let cmd =
+  let doc = "A simple gallery creation webapp" in
+  let man = [
+    ]
+  in
+  Term.(const gal $ debug $ base_dir $ port),
+  Term.info "gal" ~doc ~man ~exits:Term.default_exits
+
+let () = Term.(exit @@ eval cmd)
