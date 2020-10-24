@@ -17,7 +17,7 @@ let index = {|
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <script type="text/javascript" defer="defer" src="app.js"></script>
-  <title>Yo</title>
+  <title>New gallery</title>
   <style type="text/css">
     body {
       margin:auto;
@@ -326,9 +326,72 @@ let static_with_indexes ~local_path ~uri_prefix () =
 let static base_dir =
   static_with_indexes ~local_path:base_dir ~uri_prefix:("/" ^ base_dir) ()
 
-let gal debug base_dir port =
+module Auth = struct
+  open Opium.Std
+
+  type user = { username: string }
+  let sexp_of_user { username } = Sexplib.Conv.sexp_of_string username
+  let user_of_sexp = Sexplib.Conv.string_of_sexp
+
+  module Env = struct
+    (* or use type nonrec *)
+    type user' = user
+
+    let key : user' Opium.Hmap.key =
+      Opium.Hmap.Key.create ("user", sexp_of_user)
+  end
+
+  let m auth =
+    let filter handler req =
+      let need_auth () =
+        let headers =
+          Cohttp.Header.of_list
+            ["WWW-Authenticate", {|Basic realm="Admin password", charset="UTF-8"|}]
+        in
+        respond' ~code:`Unauthorized ~headers (`String "")
+      in
+      match req |> Request.headers |> Cohttp.Header.get_authorization with
+      | None -> need_auth ()
+      | Some (`Other _) ->
+         (* handle other, non-basic authentication mechanisms *)
+         handler req
+      | Some (`Basic (username, password)) -> (
+        match auth ~username ~password with
+        | None -> need_auth ()
+        | Some user ->
+           (* we have a user. let's add him to req *)
+           let env = Opium.Hmap.add Env.key user (Request.env req) in
+           let req = {req with Request.env} in
+           handler req )
+    in
+    Rock.Middleware.create ~name:"http basic auth" ~filter
+
+  let user req = Opium.Hmap.find Env.key (Request.env req)
+end
+
+let auth admin_password ~username ~password =
+  if username = "admin" && password = admin_password then
+    Some Auth.{ username = "admin" }
+  else
+    None
+
+(* Cursed *)
+type opium_app = { port: int; ssl : int option; debug: bool; verbose: bool; routes: int list;
+                   middlewares: int list; name: string; not_found: int }
+let enable_debug app =
+  let app : opium_app = Obj.magic app in
+  (Obj.magic { app with debug = true } : App.t)
+
+let gal debug admin_password base_dir port =
   Printf.printf "Using content directory: %s\n%!" base_dir;
-  Printf.printf "Listening on port %d...\n%!" port;
+  if debug then Printf.printf "Debug enabled\n%!";
+  let auth =
+    match admin_password with
+    | None -> fun x -> x
+    | Some pass ->
+       Printf.printf "Using authentication\n%!";
+       middleware (Auth.m (auth pass))
+  in
   let app =
     App.empty
     |> App.cmd_name "gal"
@@ -336,10 +399,15 @@ let gal debug base_dir port =
     |> index
     |> form_post ~base_dir
     |> app_js
+    (* Middlewares. The order matters: it is important that the middleware for
+       static content goes before the one for authentication (we only want
+       authentication for non-static pages). *)
+    |> (if debug then enable_debug else fun x -> x)
     |> middleware (static base_dir)
-    |> (if debug then middleware Middleware.debug else fun x -> x)
+    |> auth
     |> App.start
   in
+  Printf.printf "Listening on port %d...\n%!" port;
   Lwt_main.run app
 
 (* Command line interface *)
@@ -358,12 +426,18 @@ let debug =
   let doc = "Enable debugging" in
   Arg.(value & flag & info ~doc ~docv:"DEBUG" ["debug"])
 
+let admin_pass =
+  let doc = "Authentication password. The username is \"admin\".
+             If this option is not provided, then there is no authentication."
+  in
+  Arg.(value & opt (some string) None & info ~doc ~docv:"PASSWORD" ["password"])
+
 let cmd =
   let doc = "A simple gallery creation webapp" in
   let man = [
     ]
   in
-  Term.(const gal $ debug $ base_dir $ port),
+  Term.(const gal $ debug $ admin_pass $ base_dir $ port),
   Term.info "gal" ~doc ~man ~exits:Term.default_exits
 
 let () = Term.(exit @@ eval cmd)
