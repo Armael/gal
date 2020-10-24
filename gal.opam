@@ -12,7 +12,7 @@ depends:
   "dune" {>= "2.0"}
   "brr"
   "lwt"
-  "opium" {<= "0.18.0"}
+  "opium" {= "0.18.0"}
   "multipart_form" {= "0.1.0"}
   "bos"
   "astring"
