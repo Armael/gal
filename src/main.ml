@@ -309,9 +309,9 @@ let static_with_indexes ~local_path ~uri_prefix () =
     let req =
       if Request.meth req = `GET then
         let req_path = req |> Request.uri |> Uri.path in
-        let maybe_dir = local_path ^ String.chop_prefix ~prefix:uri_prefix req_path in
+        let maybe_dir () = local_path ^ String.chop_prefix ~prefix:uri_prefix req_path in
         if (req_path |> String.is_prefix ~prefix:uri_prefix)
-           && Bos.OS.Dir.exists (Fpath.(v maybe_dir)) = Ok true
+           && Bos.OS.Dir.exists (Fpath.(v @@ maybe_dir ())) = Ok true
         then
           { req with request =
             Cohttp.Request.{ req.request with resource = req_path ^ "/index.html" } }
