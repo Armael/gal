@@ -41,4 +41,8 @@ OPTIONS
        --password=PASSWORD
            Authentication password. The username is "admin". If this option is
            not provided, then there is no authentication.
+
+       --prefix=PREFIX
+           Uri prefix where the webapp is served. Default is "". A non-empty
+           prefix must start with a /.
 ```
