@@ -4,19 +4,22 @@ let (let*) = Option.bind
 let (let+) = Result.bind
 let (let>) = Lwt.bind
 let (/) = Filename.concat
+let (^/) x y = x ^ "/" ^ y
 
 let (|!) o s =
   match o with
   | Some x -> Ok x
   | None -> Error s
 
-let index = {|
+let index ~prefix = {|
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <script type="text/javascript" defer="defer" src="app.js"></script>
+  <script type="text/javascript" defer="defer" src="|} ^
+  (prefix ^/ "app.js") ^
+  {|"></script>
   <title>New gallery</title>
   <style type="text/css">
     body {
@@ -36,13 +39,13 @@ let index = {|
 </html>
 |}
 
-let index =
-  get "/" (fun _req ->
-      respond' (`Html index)
+let index ~prefix =
+  get (prefix ^/ "") (fun _req ->
+      respond' (`Html (index ~prefix))
     )
 
-let app_js =
-  get "/app.js" (fun _ -> respond' (`String App_embed.data))
+let app_js ~prefix =
+  get (prefix ^/ "app.js") (fun _ -> respond' (`String App_embed.data))
 
 type content_item_ty = Text | Image
 
@@ -284,8 +287,8 @@ let collect_content content_ids in_mem on_disk =
     ) content_ids
   |> list_is_success
 
-let form_post ~base_dir =
-  post "/" (fun req ->
+let form_post ~prefix ~base_dir =
+  post (prefix ^/ "") (fun req ->
       print_endline "received post";
       match get_content_type (Cohttp.Request.headers req.request) with
       | None -> respond' (`String ("Error: missing content type"))
@@ -301,10 +304,10 @@ let form_post ~base_dir =
            let cout = open_out page_fn in
            output_string cout page;
            close_out cout;
-           Ok (base_dir / url_field ^ "/")
+           Ok (Uri.of_string (prefix ^/ base_dir ^/ url_field ^/ ""))
          end
          |> function
-           | Ok uri -> redirect' (Uri.of_string uri)
+           | Ok uri -> redirect' uri
            | Error msg -> respond' (`String ("Error: " ^ msg))
     )
 
@@ -321,14 +324,14 @@ let static_with_indexes ~local_path ~uri_prefix () =
             { req with request =
               Cohttp.Request.{ req.request with resource = req_path ^ "index.html" } }
         else
-          redirect' (Uri.of_string (req_path ^ "/"))
+          redirect' (Uri.of_string (req_path ^/ ""))
       else filter handler req
     else filter handler req
   in
   Rock.Middleware.create ~filter ~name
 
-let static base_dir =
-  static_with_indexes ~local_path:base_dir ~uri_prefix:("/" ^ base_dir) ()
+let static ~prefix base_dir =
+  static_with_indexes ~local_path:base_dir ~uri_prefix:(prefix ^/ base_dir) ()
 
 module Auth = struct
   open Opium.Std
@@ -386,7 +389,7 @@ let enable_debug app =
   let app : opium_app = Obj.magic app in
   (Obj.magic { app with debug = true } : App.t)
 
-let gal debug admin_password no_serve_static base_dir port =
+let gal debug admin_password no_serve_static base_dir prefix port =
   Printf.printf "Using content directory: %s\n%!" base_dir;
   if debug then Printf.printf "Debug enabled\n%!";
   let id x = x in
@@ -401,14 +404,14 @@ let gal debug admin_password no_serve_static base_dir port =
     App.empty
     |> App.cmd_name "gal"
     |> App.port port
-    |> index
-    |> form_post ~base_dir
-    |> app_js
+    |> index ~prefix
+    |> form_post ~prefix ~base_dir
+    |> app_js ~prefix
     (* Middlewares. The order matters: it is important that the middleware for
        static content goes before the one for authentication (we only want
        authentication for non-static pages). *)
     |> (if debug then enable_debug else id)
-    |> (if no_serve_static then id else middleware (static base_dir))
+    |> (if no_serve_static then id else middleware (static ~prefix base_dir))
     |> auth
     |> App.start
   in
@@ -443,12 +446,17 @@ let admin_pass =
   in
   Arg.(value & opt (some string) None & info ~doc ~docv:"PASSWORD" ["password"])
 
+let prefix =
+  let doc = "Uri prefix where the webapp is served. Default is \"\".
+             A non-empty prefix must start with a /." in
+  Arg.(value & opt string "" & info ~doc ~docv:"PREFIX" ["prefix"])
+
 let cmd =
   let doc = "A simple gallery creation webapp" in
   let man = [
     ]
   in
-  Term.(const gal $ debug $ admin_pass $ no_serve_static $ base_dir $ port),
+  Term.(const gal $ debug $ admin_pass $ no_serve_static $ base_dir $ prefix $ port),
   Term.info "gal" ~doc ~man ~exits:Term.default_exits
 
 let () = Term.(exit @@ eval cmd)
