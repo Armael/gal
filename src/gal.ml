@@ -389,12 +389,28 @@ let enable_debug app =
   let app : opium_app = Obj.magic app in
   (Obj.magic { app with debug = true } : App.t)
 
-let gal debug admin_password no_serve_static base_dir prefix port =
+let gal debug admin_password admin_pass_file no_serve_static base_dir prefix port =
   Printf.printf "Using content directory: %s\n%!" base_dir;
   if debug then Printf.printf "Debug enabled\n%!";
   let id x = x in
+  let password =
+    match admin_password, admin_pass_file with
+    | Some pass, Some _ ->
+       Printf.printf 
+         "Passwords were provided both as a password file and on the commandline.
+          The commandline password will be used.\n%!";
+       Some pass
+    | Some pass, None -> Some pass
+    | None, Some passfile ->
+       let cin = open_in passfile in
+       let s = Astring.String.trim (input_line cin) in
+       close_in cin;
+       Some s
+    | None, None ->
+       None
+  in
   let auth =
-    match admin_password with
+    match password with
     | None -> id
     | Some pass ->
        Printf.printf "Using authentication\n%!";
@@ -446,6 +462,15 @@ let admin_pass =
   in
   Arg.(value & opt (some string) None & info ~doc ~docv:"PASSWORD" ["password"])
 
+let admin_pass_file =
+  let doc = "Path to a file containing the authentication password
+             (only the first line of the file is read).
+
+             Alternative to the --password option.
+             If both options are passed, the --password option has priority."
+  in
+  Arg.(value & opt (some string) None & info ~doc ~docv:"PASSFILE" ["passfile"])
+
 let prefix =
   let doc = "Uri prefix where the webapp is served. Default is \"\".
              A non-empty prefix must start with a /." in
@@ -456,7 +481,7 @@ let cmd =
   let man = [
     ]
   in
-  Term.(const gal $ debug $ admin_pass $ no_serve_static $ base_dir $ prefix $ port),
+  Term.(const gal $ debug $ admin_pass $ admin_pass_file $ no_serve_static $ base_dir $ prefix $ port),
   Term.info "gal" ~doc ~man ~exits:Term.default_exits
 
 let () = Term.(exit @@ eval cmd)
