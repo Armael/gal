@@ -1,0 +1,12 @@
+TODOs
+
+- switch to Dream
+
+- compress images on the client side
+  https://stackoverflow.com/questions/14672746/how-to-compress-an-image-via-javascript-in-the-browser
+
+- make the galeries editable (low tech solution: reparse and edit the static page in place)
+
+- allow uploading multiple images at once
+
+- allow adding text between two images
